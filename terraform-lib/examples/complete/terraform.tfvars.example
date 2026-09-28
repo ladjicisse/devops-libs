@@ -1,0 +1,16 @@
+project = "atlas"
+environment = "dev"
+unique_suffix = "a1b2"
+# Set TF_VAR_subscription_id and TF_VAR_postgres_admin_password outside Git.
+apps = {
+  gateway = {
+    image = "mcr.microsoft.com/k8se/quickstart:latest"
+    ingress = { target_port = 80, external_enabled = true }
+    env = { APP_ENV = "development" }
+  }
+  processor = {
+    image = "mcr.microsoft.com/k8se/quickstart:latest"
+    ingress = { target_port = 80 } # Internal unless explicitly exposed.
+    mount_files = true
+  }
+}

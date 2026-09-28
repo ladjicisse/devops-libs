@@ -1,0 +1,5 @@
+resource_group_name = "rg-atlas-state"
+storage_account_name = "statlasstatea1b2"
+container_name = "tfstate"
+key = "atlas/dev.tfstate"
+use_azuread_auth = true

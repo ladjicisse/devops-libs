@@ -1,0 +1,4 @@
+# Supply TF_VAR_subscription_id outside Git.
+resource_group_name  = "rg-atlas-state"
+storage_account_name = "statlasstatea1b2"
+location             = "francecentral"

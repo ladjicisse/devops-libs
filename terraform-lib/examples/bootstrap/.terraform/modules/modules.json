@@ -1,0 +1,1 @@
+{"Modules":[{"Key":"","Source":"","Dir":"."},{"Key":"resource_group","Source":"../../modules/resource-group","Dir":"../../modules/resource-group"},{"Key":"state","Source":"../../modules/terraform-state","Dir":"../../modules/terraform-state"}]}
