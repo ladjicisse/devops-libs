@@ -1,0 +1,8 @@
+PASS: actionlint 1.7.12 — 7 workflows (4 reusable + 3 examples).
+PASS: 6 remote calls target ladjicisse/devops-libs/.github/workflows/<file>@main.
+PASS: all example input contracts match the corresponding provider workflows.
+PASS: bash -n — 7 embedded shell scripts; embedded Python syntax valid.
+Provider implementations reside only in .github/workflows/; documentation and examples in github-workflows/.
+ShellCheck and Pyflakes integrations disabled (not installed).
+Remote availability is not validated: changes must first be committed and pushed to GitHub.
+No live Azure deployment, Docker build, or hosted GitHub Actions execution performed.

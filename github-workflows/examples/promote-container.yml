@@ -1,0 +1,28 @@
+name: Promote container release
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [STAGING, PROD]
+        required: true
+      version:
+        description: Published X.Y.Z version already deployed to the previous environment
+        type: string
+        required: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  promote:
+    uses: ladjicisse/devops-libs/.github/workflows/deploy.yml@main
+    with:
+      environment: ${{ inputs.environment }}
+      registry: ${{ vars.ACR_LOGIN_SERVER }}
+      image-name: example-api
+      version: ${{ inputs.version }}
+      resource-group: ${{ inputs.environment == 'PROD' && 'rg-example-prod' || 'rg-example-staging' }}
+      container-app: ${{ inputs.environment == 'PROD' && 'example-api-prod' || 'example-api-staging' }}
+      source-resource-group: ${{ inputs.environment == 'PROD' && 'rg-example-staging' || 'rg-example-dev' }}
+      source-container-app: ${{ inputs.environment == 'PROD' && 'example-api-staging' || 'example-api-dev' }}

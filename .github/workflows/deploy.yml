@@ -1,0 +1,96 @@
+name: deploy
+'on':
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub Environment name
+        type: string
+        required: true
+      registry:
+        description: ACR login server
+        type: string
+        required: true
+      image-name:
+        description: Image repository
+        type: string
+        required: true
+      version:
+        description: Published X.Y.Z image version
+        type: string
+        required: true
+      resource-group:
+        description: Target resource group
+        type: string
+        required: true
+      container-app:
+        description: Target Container App
+        type: string
+        required: true
+      source-resource-group:
+        description: Optional promotion source resource group
+        type: string
+        default: ''
+      source-container-app:
+        description: Optional promotion source Container App
+        type: string
+        default: ''
+    outputs:
+      image:
+        description: image
+        value: ${{ jobs.deploy.outputs.image }}
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  deploy:
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: ${{ format('container-{0}-{1}', inputs.resource-group, inputs.container-app) }}
+      cancel-in-progress: false
+    env:
+      REGISTRY: ${{ inputs.registry }}
+      IMAGE_NAME: ${{ inputs.image-name }}
+      VERSION: ${{ inputs.version }}
+      RESOURCE_GROUP: ${{ inputs.resource-group }}
+      CONTAINER_APP: ${{ inputs.container-app }}
+      SOURCE_GROUP: ${{ inputs.source-resource-group }}
+      SOURCE_APP: ${{ inputs.source-container-app }}
+    outputs:
+      image: ${{ steps.release.outputs.image }}
+    steps:
+    - name: Validate release inputs
+      shell: bash
+      run: |
+        [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '::error::Expected X.Y.Z version'; exit 1; }
+        if [[ -n "$SOURCE_APP" && -z "$SOURCE_GROUP" || -z "$SOURCE_APP" && -n "$SOURCE_GROUP" ]]; then
+          echo '::error::Both source inputs are required for promotion checks'; exit 1
+        fi
+    - uses: azure/login@v2
+      with:
+        client-id: ${{ vars.AZURE_CLIENT_ID }}
+        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    - name: Resolve digest and verify promotion source
+      shell: bash
+      run: |
+        digest="$(az acr repository show --name "${REGISTRY%%.*}" --image "$IMAGE_NAME:$VERSION" --query digest -o tsv)"
+        [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo '::error::Invalid image digest'; exit 1; }
+        if [[ -n "$SOURCE_APP" ]]; then
+          deployed="$(az containerapp show --name "$SOURCE_APP" --resource-group "$SOURCE_GROUP" --query 'properties.template.containers[0].image' -o tsv)"
+          case "$deployed" in
+            "$REGISTRY/$IMAGE_NAME@"*) source_digest="${deployed##*@}" ;;
+            "$REGISTRY/$IMAGE_NAME:"*) source_digest="$(az acr repository show --name "${REGISTRY%%.*}" --image "${deployed#*/}" --query digest -o tsv)" ;;
+            *) echo '::error::Source uses a different registry or image'; exit 1 ;;
+          esac
+          [[ "$source_digest" == "$digest" ]] || { echo '::error::Version does not match source environment'; exit 1; }
+        fi
+        echo "image=$REGISTRY/$IMAGE_NAME@$digest" >> "$GITHUB_OUTPUT"
+      id: release
+    - name: Deploy immutable image
+      shell: bash
+      run: |
+        az containerapp update --name "$CONTAINER_APP" --resource-group "$RESOURCE_GROUP" --image "$IMAGE" --output none
+      env:
+        IMAGE: ${{ steps.release.outputs.image }}

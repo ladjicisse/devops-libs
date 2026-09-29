@@ -34,7 +34,7 @@ son authentification Azure, son backend et son fichier de verrouillage.
 | [container-apps-storage](modules/container-apps-storage) | Enregistrement d’un partage dans cet environnement |
 | [workload-identity](modules/workload-identity) | Identité utilisateur et affectations RBAC explicites |
 | [container-app](modules/container-app) | API publique/privée ou worker, probes, scaling, volumes et secrets |
-| [container-app-job](modules/container-app-job) | Job planifié, cron UTC, secrets et volumes |
+| [container-app-job](modules/container-app-job) | Job manuel ou planifié, cron UTC, secrets et volumes |
 | [service-bus](modules/service-bus) | Namespace Standard et files, authentification Entra |
 | [static-web-app](modules/static-web-app) | Hébergement frontend |
 | [custom-domains](modules/custom-domains) | DNS Azure et domaines de plusieurs apps/frontends |

@@ -1,0 +1,35 @@
+name: Container CI and DEV deployment
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  image:
+    uses: ladjicisse/devops-libs/.github/workflows/acr.yml@main
+    with:
+      registry: ${{ vars.ACR_LOGIN_SERVER }}
+      image-name: example-api
+      dockerfile: Dockerfile
+      version-file: VERSION
+      push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    secrets:
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+    needs: image
+    permissions:
+      contents: read
+      id-token: write
+    uses: ladjicisse/devops-libs/.github/workflows/deploy.yml@main
+    with:
+      environment: DEV
+      registry: ${{ vars.ACR_LOGIN_SERVER }}
+      image-name: example-api
+      version: ${{ needs.image.outputs.version }}
+      resource-group: rg-example-dev
+      container-app: example-api-dev

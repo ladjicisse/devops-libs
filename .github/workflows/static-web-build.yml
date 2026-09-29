@@ -1,0 +1,76 @@
+name: static-web-build
+'on':
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory containing package-lock.json
+        type: string
+        default: .
+      node-version:
+        description: Node version
+        type: string
+        default: '22'
+      build-command:
+        description: Trusted shell command executed after npm ci
+        type: string
+        default: npm run build
+      output-directory:
+        description: Static output directory relative to working-directory
+        type: string
+        default: dist
+      artifact-name:
+        description: Unique artifact name within this workflow run
+        type: string
+        default: static-web
+      environment:
+        description: GitHub Environment used to resolve build variables
+        type: string
+        required: true
+      build-env:
+        description: JSON object of public build environment variables
+        type: string
+        default: '{}'
+    outputs:
+      artifact-name:
+        description: artifact-name
+        value: ${{ jobs.build.outputs.artifact-name }}
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      artifact-name: ${{ inputs.artifact-name }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ format('{0}/package-lock.json', inputs.working-directory) }}
+    - name: Install and build
+      shell: bash
+      run: |
+        npm ci
+        python3 - <<'PYTHON'
+        import json, os, re, subprocess
+        values = json.loads(os.environ['BUILD_ENV'])
+        if not isinstance(values, dict) or not all(isinstance(k, str) and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', k) and isinstance(v, str) for k, v in values.items()):
+            raise SystemExit('build-env must be a JSON object with environment variable names and string values')
+        subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', os.environ['BUILD_COMMAND']], env={**os.environ, **values}, check=True)
+        PYTHON
+        [[ -f "$OUTPUT_DIRECTORY/index.html" ]] || { echo '::error::Static output must contain index.html'; exit 1; }
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BUILD_COMMAND: ${{ inputs.build-command }}
+        BUILD_ENV: ${{ inputs.build-env != '{}' && inputs.build-env || vars.STATIC_WEB_BUILD_ENV || '{}' }}
+        OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ format('{0}/{1}', inputs.working-directory, inputs.output-directory) }}
+        if-no-files-found: error
+        retention-days: 7

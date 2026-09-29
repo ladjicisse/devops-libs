@@ -91,8 +91,14 @@ variable "tags" {
 }
 
 variable "cron_expression" {
-  description = "Cron expression."
+  description = "Five-field UTC cron expression. Null or omitted creates a manually triggered job."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.cron_expression == null ? true : length(regexall("[^\\s]+", trimspace(var.cron_expression))) == 5
+    error_message = "cron_expression must be null (manual) or a five-field UTC cron expression."
+  }
 }
 
 variable "replica_timeout_in_seconds" {

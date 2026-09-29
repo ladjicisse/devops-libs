@@ -1,0 +1,112 @@
+name: acr
+'on':
+  workflow_call:
+    inputs:
+      registry:
+        description: ACR login server, e.g. example.azurecr.io
+        type: string
+        required: true
+      image-name:
+        description: Image repository name
+        type: string
+        required: true
+      dockerfile:
+        description: Dockerfile path
+        type: string
+        default: Dockerfile
+      context:
+        description: Docker build context
+        type: string
+        default: .
+      version-file:
+        description: File containing an X.Y.Z version
+        type: string
+        default: VERSION
+      push:
+        description: Publish image; always disabled for pull requests
+        type: boolean
+        default: false
+      build-args:
+        description: Non-secret multiline Docker build arguments
+        type: string
+        default: ''
+      platforms:
+        description: Target Docker platforms
+        type: string
+        default: linux/amd64
+      publish-latest:
+        description: Also publish latest
+        type: boolean
+        default: false
+    secrets:
+      ACR_USERNAME:
+        required: false
+      ACR_PASSWORD:
+        required: false
+    outputs:
+      version:
+        description: version
+        value: ${{ jobs.build.outputs.version }}
+      digest:
+        description: digest
+        value: ${{ jobs.build.outputs.digest }}
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ format('acr-{0}-{1}-{2}', github.repository, inputs.image-name, github.ref) }}
+      cancel-in-progress: false
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Read version
+      shell: bash
+      run: |
+        version="$(tr -d '[:space:]' < "$VERSION_FILE")"
+        [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo '::error::Expected X.Y.Z version'; exit 1; }
+        echo "value=$version" >> "$GITHUB_OUTPUT"
+        echo "sha_tag=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      id: version
+      env:
+        VERSION_FILE: ${{ inputs.version-file }}
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
+    - name: Log in to ACR
+      if: ${{ inputs.push && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    - name: Reject an existing release tag
+      shell: bash
+      run: |
+        if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+          echo '::error::Version already published; increment the version file.'
+          exit 1
+        fi
+      if: ${{ inputs.push && github.event_name != 'pull_request' && github.event_name != 'pull_request_target' }}
+      env:
+        IMAGE: ${{ format('{0}/{1}:{2}', inputs.registry, inputs.image-name, steps.version.outputs.value) }}
+    - name: Build image
+      id: build
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        platforms: ${{ inputs.platforms }}
+        build-args: ${{ inputs.build-args }}
+        push: ${{ inputs.push && github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
+          }}
+        tags: |-
+          ${{ format('{0}/{1}:{2}', inputs.registry, inputs.image-name, steps.version.outputs.value) }}
+          ${{ format('{0}/{1}:{2}', inputs.registry, inputs.image-name, steps.version.outputs.sha_tag) }}
+          ${{ inputs.publish-latest && format('{0}/{1}:latest', inputs.registry, inputs.image-name) || '' }}
+        cache-from: ${{ format('type=gha,scope={0}', inputs.image-name) }}
+        cache-to: ${{ format('type=gha,mode=max,scope={0}', inputs.image-name) }}

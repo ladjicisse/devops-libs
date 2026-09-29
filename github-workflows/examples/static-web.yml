@@ -1,0 +1,50 @@
+name: Static website
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (selected branch or tag determines the commit)
+        type: choice
+        options: [DEV, STAGING, PROD]
+        default: DEV
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: static-${{ github.event.pull_request.number || inputs.environment || 'DEV' }}
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.event.action != 'closed'
+    uses: ladjicisse/devops-libs/.github/workflows/static-web-build.yml@main
+    with:
+      environment: ${{ inputs.environment || 'DEV' }}
+      working-directory: web
+      output-directory: dist
+      build-command: npm run build
+  deploy:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: build
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ladjicisse/devops-libs/.github/workflows/static-web-deploy.yml@main
+    with:
+      environment: ${{ inputs.environment || 'DEV' }}
+      artifact-name: ${{ needs.build.outputs.artifact-name }}
+    secrets: inherit
+  close-preview:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ladjicisse/devops-libs/.github/workflows/static-web-deploy.yml@main
+    with:
+      environment: DEV
+      action: close
+    secrets: inherit

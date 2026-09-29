@@ -7,10 +7,20 @@ resource "azurerm_container_app_job" "this" {
   replica_timeout_in_seconds   = var.replica_timeout_in_seconds
   replica_retry_limit          = var.replica_retry_limit
   tags                         = var.tags
-  schedule_trigger_config {
-    cron_expression          = var.cron_expression
-    parallelism              = 1
-    replica_completion_count = 1
+  dynamic "manual_trigger_config" {
+    for_each = var.cron_expression == null ? [1] : []
+    content {
+      parallelism              = 1
+      replica_completion_count = 1
+    }
+  }
+  dynamic "schedule_trigger_config" {
+    for_each = var.cron_expression == null ? [] : [var.cron_expression]
+    content {
+      cron_expression          = schedule_trigger_config.value
+      parallelism              = 1
+      replica_completion_count = 1
+    }
   }
 
   dynamic "identity" {
